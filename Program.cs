@@ -5,12 +5,12 @@ using KeyboardController.Services;
 const int Port = 8181;
 var builder = WebApplication.CreateBuilder(args);
 
-// Слушаем локальную петлю на порту 8181 для приема пакетов от SSH-туннеля
+// Listen on loclhost on port 8181
 builder.WebHost.UseUrls($"http://127.0.0.1:{Port}");
 
 var app = builder.Build();
 
-// Включаем автоматическую отдачу index.html из папки wwwroot
+// Enable automatic serving of index.html from the wwwroot folder
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -18,7 +18,7 @@ app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSecond
 
 var inputHandler = new InputHandler();
 
-// Обработка WebSocket
+// Handle WebSocket
 app.Map("/ws", async context =>
 {
     if (!context.WebSockets.IsWebSocketRequest)
@@ -28,7 +28,7 @@ app.Map("/ws", async context =>
     }
 
     using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-    Console.WriteLine("[+] Телефон подключен к пульту.");
+    Console.WriteLine("[+] Device connected.");
 
     var buffer = new byte[1024 * 4];
     try
@@ -48,28 +48,33 @@ app.Map("/ws", async context =>
     catch { }
     finally
     {
-        Console.WriteLine("[-] Телефон отключен.");
+        Console.WriteLine("[-] Device disconnected.");
     }
 });
 
-// Запускаем веб-сервер
+// Start the web server
 await app.StartAsync();
-Console.WriteLine($"[✓] Локальный сервер готов: http://localhost:{Port}");
+Console.WriteLine($"[✓] Local server is ready: http://localhost:{Port}");
 
-// Запускаем фоновый туннель
+// Start the background tunnel
 var tunnelService = new TunnelService();
-Console.WriteLine("[*] Подключаем туннель...");
+Console.WriteLine("[*] Connecting tunnel...");
 var publicUrl = await tunnelService.StartAsync(Port);
 
 if (!string.IsNullOrEmpty(publicUrl))
 {
     Console.WriteLine($"\n==========================================");
-    Console.WriteLine($" Ссылка для телефона: {publicUrl}");
+    Console.WriteLine($" URL: {publicUrl}");
     Console.WriteLine($"==========================================\n");
 }
 else
 {
-    Console.WriteLine("[!] Не удалось получить ссылку туннеля. Проверьте SSH-подключение.");
+    Console.WriteLine("[!] Failed to obtain tunnel URL. Check your SSH connection.");
 }
+
+// Tray icon initialization
+var trayService = new TrayService();
+trayService.Initialize(publicUrl ?? $"http://localhost:{Port}");
+Console.WriteLine("[*] Icon added to system tray");
 
 await app.WaitForShutdownAsync();

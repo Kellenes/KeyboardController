@@ -11,13 +11,9 @@ public class TunnelService
     {
         var tcs = new TaskCompletionSource<string?>();
 
-        // -v : подробный лог каждого сетевого пакета
-        // -tt: отключение буферизации (вывод сразу идет в консоль)
-        // -p 443: обход стандартных блокировок 22 порта
         var psi = new ProcessStartInfo
         {
             FileName = "ssh",
-            // nokey@localhost.run - официальный публичный шлюз без паролей
             Arguments = $"-o StrictHostKeyChecking=no -o ServerAliveInterval=15 -R 80:127.0.0.1:{localPort} nokey@localhost.run",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -31,13 +27,12 @@ public class TunnelService
         {
             if (string.IsNullOrWhiteSpace(line)) return;
 
-            // Выводим сырой лог SSH в консоль желтым цветом, чтобы ты видел всё
+            // Logging SSH output to console with color
             Console.ForegroundColor = ConsoleColor.DarkYellow;
             Console.WriteLine($"[SSH {streamName}]: {line}");
             Console.ResetColor();
 
-            // Ищем ссылку в потоке
-            // localhost.run выдает адреса на домене lhr.life или lhr.rocks
+            // Looking for the URL in the output
             var match = Regex.Match(line, @"https://[a-zA-Z0-9-]+\.(lhr\.life|lhr\.rocks)");
             if (match.Success && !tcs.Task.IsCompleted)
             {
@@ -46,15 +41,12 @@ public class TunnelService
         }
 
         _tunnelProcess.OutputDataReceived += (_, e) => HandleLog(e.Data, "OUT");
-
         _tunnelProcess.Start();
-
-        // Запуск неблокирующего асинхронного чтения обоих потоков
         _tunnelProcess.BeginOutputReadLine();
 
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Stop();
 
-        // Ждем либо поимки URL, либо таймаута 15 секунд
+        // Wait for either the URL to be found or a timeout of 15 seconds
         var completed = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(15)));
 
         if (completed == tcs.Task)
@@ -65,7 +57,7 @@ public class TunnelService
         return null;
     }
 
-    public void Stop()
+    private void Stop()
     {
         if (_tunnelProcess is { HasExited: false })
         {

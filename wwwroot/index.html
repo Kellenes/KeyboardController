@@ -138,13 +138,13 @@
 <body>
     <div id="status-bar">
         <div id="dot" class="indicator"></div>
-        <span id="status-text">Подключение...</span>
+        <span id="status-text">Connecting...</span>
     </div>
 
     <div class="container">
         <form id="text-form" class="text-box-container" onsubmit="event.preventDefault(); sendText();">
-            <input type="text" id="text-input" placeholder="Наберите текст..." autocomplete="off">
-            <button type="submit" class="send-btn">Ввод</button>
+            <input type="text" id="text-input" placeholder="Enter text..." autocomplete="off">
+            <button type="submit" class="send-btn">Enter</button>
         </form>
 
         <div class="grid">
@@ -189,11 +189,11 @@
             ws = new WebSocket(wsUrl);
             ws.onopen = () => {
                 dot.classList.add('connected');
-                statusText.innerText = 'Подключено к ПК';
+                statusText.innerText = 'Connected to PC';
             };
             ws.onclose = () => {
                 dot.classList.remove('connected');
-                statusText.innerText = 'Связь потеряна. Переподключение...';
+                statusText.innerText = 'Connection lost. Reconnecting...';
                 setTimeout(connect, 1500);
             };
             ws.onerror = () => ws.close();
