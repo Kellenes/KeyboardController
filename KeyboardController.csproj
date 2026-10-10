@@ -7,12 +7,36 @@
     <Nullable>enable</Nullable>
 	<UseWindowsForms>true</UseWindowsForms>
 	<EmbedUntrackedSources>true</EmbedUntrackedSources>
+	<ApplicationIcon>favicon.ico</ApplicationIcon>
+
+	<_SuppressWinFormsTrimError>true</_SuppressWinFormsTrimError>
+
+	<PublishSingleFile>true</PublishSingleFile>
+	<SelfContained>true</SelfContained>
+	<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+	<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+	  
+	<DebuggerSupport>false</DebuggerSupport>
+	<EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
+	<EventSourceSupport>false</EventSourceSupport>
+	<HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+	<MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+
+	<PublishTrimmed>true</PublishTrimmed>
+	<TrimMode>partial</TrimMode>
+
+	<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+	<IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+	<GenerateStaticWebAssetsManifest>false</GenerateStaticWebAssetsManifest>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="InputSimulatorStandard" Version="1.0.0" />
-    <PackageReference Include="QRCoder" Version="1.8.0" />
+	<TrimmerRootAssembly Include="System.Windows.Forms" />
+	<TrimmerRootAssembly Include="Microsoft.AspNetCore.Server.Kestrel.Core" />
+
+	<PackageReference Include="InputSimulatorStandard" Version="1.0.0" />
 	<Content Update="wwwroot\**" CopyToPublishDirectory="PreserveNewest" />
+	<EmbeddedResource Include="favicon.ico" />
   </ItemGroup>
 
 </Project>

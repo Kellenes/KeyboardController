@@ -1,72 +1,92 @@
-﻿using System.Diagnostics;
-using System.Text.RegularExpressions;
+﻿using System.Net.Sockets;
+using System.Text.Json;
 
 namespace KeyboardController.Services;
 
 public class TunnelService
 {
-    private Process? _tunnelProcess;
+    private readonly HttpClient _http = new();
+    private CancellationTokenSource? _cts;
 
-    public async Task<string?> StartAsync(int localPort)
+    public async Task<string?> StartAsync(int localPort, string? requestedSubdomain = null)
     {
-        var tcs = new TaskCompletionSource<string?>();
+        _cts = new CancellationTokenSource();
 
-        var psi = new ProcessStartInfo
+        try
         {
-            FileName = "ssh",
-            Arguments = $"-o StrictHostKeyChecking=no -o ServerAliveInterval=15 -R 80:127.0.0.1:{localPort} nokey@localhost.run",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+            // 1. Access the Localtunnel API to get a remote port and URL
+            string requestUrl = string.IsNullOrWhiteSpace(requestedSubdomain)
+                ? "https://localtunnel.me/?new"
+                : $"https://localtunnel.me/{requestedSubdomain}";
 
-        _tunnelProcess = new Process { StartInfo = psi };
+            var response = await _http.GetStringAsync(requestUrl, _cts.Token);
+            using var doc = JsonDocument.Parse(response);
+            var root = doc.RootElement;
 
-        void HandleLog(string? line, string streamName)
-        {
-            if (string.IsNullOrWhiteSpace(line)) return;
+            string assignedUrl = root.GetProperty("url").GetString()!;
+            int remotePort = root.GetProperty("port").GetInt32();
+            int maxConn = root.TryGetProperty("max_conn", out var mc) ? mc.GetInt32() : 10;
 
-            // Logging SSH output to console with color
-            Console.ForegroundColor = ConsoleColor.DarkYellow;
-            Console.WriteLine($"[SSH {streamName}]: {line}");
-            Console.ResetColor();
+            Console.WriteLine($"[✓] Assigned remote port: {remotePort}");
 
-            // Looking for the URL in the output
-            var match = Regex.Match(line, @"https://[a-zA-Z0-9-]+\.(lhr\.life|lhr\.rocks)");
-            if (match.Success && !tcs.Task.IsCompleted)
-            {
-                tcs.TrySetResult(match.Value);
-            }
+            // 2. Start maintaining a pool of connections to handle incoming requests
+            _ = Task.Run(() => MaintainProxyPoolAsync(remotePort, localPort, maxConn, _cts.Token));
+
+            return assignedUrl;
         }
-
-        _tunnelProcess.OutputDataReceived += (_, e) => HandleLog(e.Data, "OUT");
-        _tunnelProcess.Start();
-        _tunnelProcess.BeginOutputReadLine();
-
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => Stop();
-
-        // Wait for either the URL to be found or a timeout of 15 seconds
-        var completed = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(15)));
-
-        if (completed == tcs.Task)
+        catch (Exception ex)
         {
-            return await tcs.Task;
+            Console.WriteLine($"[!] Failed to start tunnel: {ex.Message}");
+            return null;
         }
-
-        return null;
     }
 
-    private void Stop()
+    private async Task MaintainProxyPoolAsync(int remotePort, int localPort, int maxConn, CancellationToken ct)
     {
-        if (_tunnelProcess is { HasExited: false })
+        // Hold a list of tasks to manage multiple connections
+        var tasks = new List<Task>();
+        for (int i = 0; i < maxConn; i++)
         {
-            try
+            tasks.Add(Task.Run(async () =>
             {
-                _tunnelProcess.Kill(true);
-                _tunnelProcess.Dispose();
-            }
-            catch { }
+                while (!ct.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await HandleTunnelConnectionAsync(remotePort, localPort, ct);
+                    }
+                    catch
+                    {
+                        await Task.Delay(1000, ct); // Pause before reconnecting
+                    }
+                }
+            }, ct));
         }
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task HandleTunnelConnectionAsync(int remotePort, int localPort, CancellationToken ct)
+    {
+        using var remoteClient = new TcpClient();
+        await remoteClient.ConnectAsync("localtunnel.me", remotePort, ct);
+
+        using var localClient = new TcpClient();
+        await localClient.ConnectAsync("127.0.0.1", localPort, ct);
+
+        using var remoteStream = remoteClient.GetStream();
+        using var localStream = localClient.GetStream();
+
+        // Two-way data transfer between remote and local streams
+        var task1 = remoteStream.CopyToAsync(localStream, ct);
+        var task2 = localStream.CopyToAsync(remoteStream, ct);
+
+        await Task.WhenAny(task1, task2);
+    }
+
+    public void Stop()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
     }
 }

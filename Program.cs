@@ -4,6 +4,9 @@ using KeyboardController.Services;
 
 const int Port = 8181;
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
+builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
+builder.Logging.AddFilter("System", LogLevel.Warning);
 
 // Listen on loclhost on port 8181
 builder.WebHost.UseUrls($"http://127.0.0.1:{Port}");
@@ -54,22 +57,24 @@ app.Map("/ws", async context =>
 
 // Start the web server
 await app.StartAsync();
-Console.WriteLine($"[✓] Local server is ready: http://localhost:{Port}");
 
-// Start the background tunnel
-var tunnelService = new TunnelService();
-Console.WriteLine("[*] Connecting tunnel...");
-var publicUrl = await tunnelService.StartAsync(Port);
+var lt = new TunnelService();
+Console.WriteLine("[*] Connecting to Localtunnel...");
+
+string? customName = "pad-" + Environment.MachineName.ToLower();
+var publicUrl = await lt.StartAsync(Port, customName);
 
 if (!string.IsNullOrEmpty(publicUrl))
 {
+    Console.ForegroundColor = ConsoleColor.Green;
     Console.WriteLine($"\n==========================================");
-    Console.WriteLine($" URL: {publicUrl}");
+    Console.WriteLine($" Link: {publicUrl}");
     Console.WriteLine($"==========================================\n");
+    Console.ResetColor();
 }
 else
 {
-    Console.WriteLine("[!] Failed to obtain tunnel URL. Check your SSH connection.");
+    Console.WriteLine("[!] Cannot connect to Localtunnel.");
 }
 
 // Tray icon initialization
